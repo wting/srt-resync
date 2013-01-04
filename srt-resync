@@ -8,12 +8,18 @@ import sys
 
 from io import FileIO as file
 
+VERSION = "0.1"
+
 def parse_options():
+    global VERSION
+
     parser = argparse.ArgumentParser(
             description = 'Offset srt subtitles.')
 
     parser.add_argument('offset', type = float)
     parser.add_argument('srt_file', type = file)
+    parser.add_argument('--version', action = "version", version = "%(prog)s " + VERSION,
+            help = "show version information and quit")
 
     return parser.parse_args()
 
