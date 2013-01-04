@@ -1,12 +1,10 @@
 ## NAME
 
-srt-resync - shift subtitles in .srt files by a given offset in seconds
+srt-resync - shift subtitles in .srt files by a given offset.
 
 ## SYNOPSIS
 
     srt-resync [seconds] [srt_file]
-
-    srt-resync -o [seconds] [srt_file]
 
 ## EXAMPLE
 
