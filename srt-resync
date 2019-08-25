@@ -43,12 +43,6 @@ def parse_options():
 
     return parser.parse_args()
 
-def rzeropad(ms):
-    ms = str(int(ms))
-    while len(ms) < 3:
-        ms += "0"
-    return ms
-
 def offset_time(offset, time_string):
     #FIXME: does not support timestamps >= 24 hours
     ts = time_string.replace(',', ':').split(':')
@@ -61,7 +55,7 @@ def offset_time(offset, time_string):
     if ts.year != 2013 or ts.month != 1 or ts.day != 1:
         sys.exit("ERROR: invalid offset resulting timestamp overflow")
 
-    return "%s,%s" % (ts.strftime("%H:%M:%S"), rzeropad(ts.microsecond / 1000)) # microsecond -> millisecond
+    return "%s,%03d" % (ts.strftime("%H:%M:%S"), ts.microsecond / 1000) # microsecond -> millisecond
 
 def modify_file(options):
     if '.srt' not in options.srt_file.name:
