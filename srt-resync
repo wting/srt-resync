@@ -62,9 +62,10 @@ def modify_file(options):
         sys.exit("ERROR: invalid srt file")
 
     out_filename = os.path.splitext(options.srt_file.name)[0] + '-resync.srt'
-    with open(out_filename, 'w', encoding = 'utf-8') as out:
-        with open(options.srt_file.name, 'r', encoding = 'utf-8') as srt:
-            for line in srt.readlines():
+    with open(options.srt_file.name, 'r', encoding = 'utf-8') as srt:
+        line = srt.readline()  # read first line to determine line endings
+        with open(out_filename, 'w', encoding = 'utf-8', newline = srt.newlines) as out:
+            while line:
                 match = re.search(r'^(\d+:\d+:\d+,\d+)\s+--\>\s+(\d+:\d+:\d+,\d+)', line)
                 if match:
                     out.write("%s --> %s\n" % (
@@ -73,6 +74,7 @@ def modify_file(options):
                         ))
                 else:
                     out.write(line)
+                line = srt.readline()
 
     if options.overwrite:
         shutil.move(out_filename, options.srt_file.name)
