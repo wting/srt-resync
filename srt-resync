@@ -43,7 +43,7 @@ def parse_options():
 
     return parser.parse_args()
 
-def offset_time(offset, time_string):
+def adjust_time(time_string, offset):
     #FIXME: does not support timestamps >= 24 hours
     ts = time_string.replace(',', ':').split(':')
     ts = [int(x) for x in ts]
@@ -69,8 +69,8 @@ def modify_file(options):
                 match = re.search(r'^(\d+:\d+:\d+,\d+)\s+--\>\s+(\d+:\d+:\d+,\d+)', line)
                 if match:
                     out.write("%s --> %s\n" % (
-                        offset_time(options.offset, match.group(1)),
-                        offset_time(options.offset, match.group(2))
+                        adjust_time(match.group(1), options.offset),
+                        adjust_time(match.group(2), options.offset)
                         ))
                 else:
                     out.write(line)
