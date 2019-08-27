@@ -18,7 +18,6 @@
 """
 
 import argparse
-import datetime
 import os
 import re
 import shutil
@@ -43,19 +42,15 @@ def parse_options():
 
     return parser.parse_args()
 
+def ts_to_secs(ts):
+    "Takes timestamp in 'HH:MM:SS,mmm' form, returns seconds"
+    hours, mins, secs, ms = [int(x) for x in ts.replace(',', ':').split(':')]
+    return (hours * 3600) + (mins * 60) + secs + (ms / 1000)
+
 def adjust_time(time_string, offset):
-    #FIXME: does not support timestamps >= 24 hours
-    ts = time_string.replace(',', ':').split(':')
-    ts = [int(x) for x in ts]
-    ts = datetime.datetime(2013, 1, 1, ts[0], ts[1], ts[2], ts[3] * 1000) # millisecond -> microsecond
-
-    delta = datetime.timedelta(seconds = offset)
-    ts += delta
-
-    if ts.year != 2013 or ts.month != 1 or ts.day != 1:
-        sys.exit("ERROR: invalid offset resulting timestamp overflow")
-
-    return "%s,%03d" % (ts.strftime("%H:%M:%S"), ts.microsecond / 1000) # microsecond -> millisecond
+    "Takes timestamp string and offset, returns formatted timestamp string with offset applied"
+    ts = ts_to_secs(time_string) + offset
+    return '%02d:%02d:%02d,%03d' % (ts // 3600, ts % 3600 // 60, ts % 60, round((ts - int(ts)) * 1000))
 
 def modify_file(options):
     if '.srt' not in options.srt_file.name:
