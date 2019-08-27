@@ -18,7 +18,6 @@
 """
 
 import argparse
-import datetime
 import os
 import re
 import shutil
@@ -26,15 +25,39 @@ import sys
 
 from io import FileIO as file
 
-VERSION = "0.1"
+VERSION = "0.2"
 
 def parse_options():
     global VERSION
 
     parser = argparse.ArgumentParser(
-            description = 'Offset srt subtitles.')
+            description = 'Adjust srt subtitle times',
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog =
+'''
+Timestamps may be given as standalone seconds (optionally with decimals) and
+may include hours and minutes provided that colon (:) separators are used.
 
-    parser.add_argument('offset', type = float)
+If a single timestamp is given, it is treated as an offset that will be
+applied (added) to all timestamps in the file.
+
+If multiple time offsets are given, they must be in pairs and the first value
+of each pair will be used as an original time and the second will be the new
+time.  All timestamps will be adjusted according to a linear interpolation of
+the closest provided adjustment values.
+
+Examples:
+    srt-scale 2.3 input.srt
+        Will adjust all the subtitles to be 2.3 seconds later
+    srt-scale 21 32.6 1:04:35.545 1:06:21.8 input.srt
+        Will use the points (21.0, 32.6) and (1:04:35.545, 1:06:21.8) to
+        shift and scale all timestamps based on the defined line.
+        Subtitles near the beginning will start off approximately 11.6
+        seconds later, and timestamps near the end will be approximately
+        1 minute and 46.255 seconds later.
+''')
+
+    parser.add_argument('ts', nargs = '+', help = 'Single offset or pairs of offset timestamps')
     parser.add_argument('srt_file', type = file)
     parser.add_argument('-o', '--overwrite', action = "store_true", default = False,
             help = "overwite original file")
@@ -43,42 +66,79 @@ def parse_options():
 
     return parser.parse_args()
 
-def rzeropad(ms):
-    ms = str(int(ms))
-    while len(ms) < 3:
-        ms += "0"
-    return ms
+def ts_to_secs(ts):
+    "Takes timestamp in 'HH:MM:SS,mmm' form, returns seconds"
+    hours, mins, secs, ms = [int(x) for x in ts.replace(',', ':').split(':')]
+    return (hours * 3600) + (mins * 60) + secs + (ms / 1000)
 
-def offset_time(offset, time_string):
-    #FIXME: does not support timestamps >= 24 hours
-    ts = time_string.replace(',', ':').split(':')
-    ts = [int(x) for x in ts]
-    ts = datetime.datetime(2013, 1, 1, ts[0], ts[1], ts[2], ts[3] * 1000) # millisecond -> microsecond
+def adjust_time(time_string, adjs):
+    # Find and apply the adjustment values of the proper timerange
+    ts = ts_to_secs(time_string)
+    try:
+        for idx in range(len(adjs)):
+            _, slope, offset = adjs[idx]
+            if adjs[idx + 1][0] > ts:
+                break
+    except IndexError:
+        pass
 
-    delta = datetime.timedelta(seconds = offset)
-    ts += delta
+    ts = ts * slope + offset
+    return '%02d:%02d:%02d,%03d' % (ts // 3600, ts % 3600 // 60, ts % 60, round((ts - int(ts)) * 1000))
 
-    if ts.year != 2013 or ts.month != 1 or ts.day != 1:
-        sys.exit("ERROR: invalid offset resulting timestamp overflow")
+def parse_time(ts):
+    "Takes a time string and calculates the time in seconds (fractional)"
+    items = ts.replace(',', '.').split(':')
+    while len(items) < 3:
+        items.insert(0, 0)
+    if len(items) > 3:
+        raise ValueError('Time string is not valid, too many number elements: %s', ts)
+    return int(items[0]) * 3600 + int(items[1]) * 60 + float(items[2])
 
-    return "%s,%s" % (ts.strftime("%H:%M:%S"), rzeropad(ts.microsecond / 1000)) # microsecond -> millisecond
+def calc_adjust(options):
+    "Calculate and return the correction factors for the provided timeframes"
+    vals = [parse_time(x) for x in options.ts]
+    adjs = []  # This will contain list of (time, slope, offset) tuples
+    if len(vals) == 1:
+        adjs.append((0, 1, vals[0]))
+        return adjs
+    if len(vals) % 2 != 0:
+        raise ValueError('Timestamp values must be in pairs')
+    # Handle single point (fixed offset)
+    if len(vals) == 2:
+        adjs.append((0, 1, vals[1] - vals[0]))
+
+    # Handle if have multiple pairs of points that define a set of joined line segments
+    for idx in range(0, len(vals) - 2, 2):
+        x1, y1, x2, y2 = vals[idx:idx + 4]
+        if x1 >= x2 or y1 >= y2:
+            raise ValueError('Timestamp pairs must be in increasing order')
+        slope = (y2 - y1) / (x2 - x1)
+        # Find the y-intercept
+        shift = y1 - (slope * x1)
+        adjs.append((x1, slope, shift))
+
+    return adjs
 
 def modify_file(options):
     if '.srt' not in options.srt_file.name:
         sys.exit("ERROR: invalid srt file")
 
+    adjs = calc_adjust(options)
+
     out_filename = os.path.splitext(options.srt_file.name)[0] + '-resync.srt'
-    with open(out_filename, 'w', encoding = 'utf-8') as out:
-        with open(options.srt_file.name, 'r', encoding = 'utf-8') as srt:
-            for line in srt.readlines():
+    with open(options.srt_file.name, 'r', encoding = 'utf-8') as srt:
+        line = srt.readline()  # read first line to determine line endings
+        with open(out_filename, 'w', encoding = 'utf-8', newline = srt.newlines) as out:
+            while line:
                 match = re.search(r'^(\d+:\d+:\d+,\d+)\s+--\>\s+(\d+:\d+:\d+,\d+)', line)
                 if match:
                     out.write("%s --> %s\n" % (
-                        offset_time(options.offset, match.group(1)),
-                        offset_time(options.offset, match.group(2))
+                        adjust_time(match.group(1), adjs),
+                        adjust_time(match.group(2), adjs)
                         ))
                 else:
                     out.write(line)
+                line = srt.readline()
 
     if options.overwrite:
         shutil.move(out_filename, options.srt_file.name)
