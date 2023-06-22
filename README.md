@@ -24,7 +24,7 @@ numbers and partial seconds are supported.
 ## MISC
 
 To calculate delay, the easiest method is to open the video file using VLC with
-the appropriate subtitles. Use the `g`/`k` keyboard shortcuts to modify the
+the appropriate subtitles. Use the `g`/`h` keyboard shortcuts to modify the
 subtitle timing until it's correct. Note the subtitle offset time, then run
 `srt-resync` passing the offset as an parameter.
 
